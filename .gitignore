@@ -1,0 +1,7 @@
+.idea/
+.env
+.venv
+env/
+venv/
+coverage.xml
+__pycache__/

@@ -1,0 +1,82 @@
+Transform: AWS::Serverless-2016-10-31
+Resources:
+  Api:
+    Type: AWS::Serverless::Api
+    Properties:
+      Name: !Sub
+        - ${ResourceName} From Stack ${AWS::StackName}
+        - ResourceName: Api
+      StageName: Prod
+      DefinitionBody:
+        openapi: '3.0'
+        info: {}
+        paths:
+          /animals/top:
+            get:
+              x-amazon-apigateway-integration:
+                httpMethod: POST
+                type: aws_proxy
+                uri: !Sub arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${GetTopAnimals.Arn}/invocations
+              responses: {}
+      EndpointConfiguration: REGIONAL
+      TracingEnabled: true
+  GetTopAnimals:
+    Type: AWS::Serverless::Function
+    Properties:
+      Description: !Sub
+        - Stack ${AWS::StackName} Function ${ResourceName}
+        - ResourceName: GetTopAnimals
+      CodeUri: src/Function
+      Handler: handler.handler
+      Runtime: python3.7
+      MemorySize: 3008
+      Timeout: 30
+      Tracing: Active
+      Environment:
+        Variables:
+          BUCKET_NAME: !Ref AnimalThumbnails
+          BUCKET_ARN: !GetAtt AnimalThumbnails.Arn
+      Policies:
+        - S3CrudPolicy:
+            BucketName: !Ref AnimalThumbnails
+      Events:
+        ApiGETanimalstop:
+          Type: Api
+          Properties:
+            Path: /animals/top
+            Method: GET
+            RestApiId: !Ref Api
+  GetTopAnimalsLogGroup:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: Retain
+    Properties:
+      LogGroupName: !Sub /aws/lambda/${GetTopAnimals}
+  AnimalThumbnails:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub ${AWS::StackName}-animalthu-${AWS::AccountId}
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: aws:kms
+              KMSMasterKeyID: alias/aws/s3
+      PublicAccessBlockConfiguration:
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+  AnimalThumbnailsBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref AnimalThumbnails
+      PolicyDocument:
+        Id: RequireEncryptionInTransit
+        Version: '2012-10-17'
+        Statement:
+          - Principal: '*'
+            Action: '*'
+            Effect: Deny
+            Resource:
+              - !GetAtt AnimalThumbnails.Arn
+              - !Sub ${AnimalThumbnails.Arn}/*
+            Condition:
+              Bool:
+                aws:SecureTransport: 'false'
